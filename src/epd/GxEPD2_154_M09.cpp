@@ -13,8 +13,8 @@
 
 #include "GxEPD2_154_M09.h"
 
-GxEPD2_154_M09::GxEPD2_154_M09(int8_t cs, int8_t dc, int8_t rst, int8_t busy) :
-  GxEPD2_EPD(cs, dc, rst, busy, LOW, 10000000, WIDTH, HEIGHT, panel, hasColor, hasPartialUpdate, hasFastPartialUpdate)
+GxEPD2_154_M09::GxEPD2_154_M09(int8_t cs, int8_t dc, int8_t rst, int8_t busy, SPIClass &spi) :
+  GxEPD2_EPD(cs, dc, rst, busy, LOW, 10000000, WIDTH, HEIGHT, panel, hasColor, hasPartialUpdate, hasFastPartialUpdate, spi)
 {
 }
 
