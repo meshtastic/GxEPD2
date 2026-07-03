@@ -109,11 +109,16 @@ void GxEPD2_290_BN8::writeImage(const uint8_t bitmap[], int16_t x, int16_t y, in
     _writeImage(0x24, bitmap, x, y, w, h, invert, mirror_y, pgm);
 }
 
-// Write image to "OLD" (black) memory. Used for determining which pixels move during fast refresh
+// Write image to both NEW and OLD memory after fast refresh, keeping both buffers in sync so the
+// controller's differential refresh compares against the image that's actually on screen (E290
+// fast-refresh ghosting fix: writing only to OLD left NEW stale, causing incorrect pixel diffs)
 void GxEPD2_290_BN8::writeImageAgain(const uint8_t bitmap[], int16_t x, int16_t y, int16_t w, int16_t h, bool invert,
                                      bool mirror_y, bool pgm)
 {
-    // Pass-down to the generic write method method, passing the command for write "OLD" mem
+    // Write to NEW memory first (required for proper differential refresh)
+    _writeImage(0x24, bitmap, x, y, w, h, invert, mirror_y, pgm);
+
+    // Then write to OLD memory
     _writeImage(0x26, bitmap, x, y, w, h, invert, mirror_y, pgm);
 
     // Tell the display controller IC that we're done transferring image data, but don't want to take further action
