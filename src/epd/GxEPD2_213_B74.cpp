@@ -42,10 +42,7 @@ void GxEPD2_213_B74::writeScreenBufferAgain(uint8_t value)
 void GxEPD2_213_B74::_writeScreenBuffer(uint8_t command, uint8_t value)
 {
   _writeCommand(command);
-  for (uint32_t i = 0; i < uint32_t(WIDTH) * uint32_t(HEIGHT) / 8; i++)
-  {
-    _writeData(value);
-  }
+  _writeDataRepeated(value, uint32_t(WIDTH) * uint32_t(HEIGHT) / 8);
 }
 
 void GxEPD2_213_B74::writeImage(const uint8_t bitmap[], int16_t x, int16_t y, int16_t w, int16_t h, bool invert, bool mirror_y, bool pgm)
@@ -81,12 +78,15 @@ void GxEPD2_213_B74::_writeImage(uint8_t command, const uint8_t bitmap[], int16_
   w1 -= dx;
   h1 -= dy;
   if ((w1 <= 0) || (h1 <= 0)) return;
+  const int16_t wb_win = w1 / 8; // bytes per window row; w1 is a multiple of 8 and <= WIDTH, see clipping above
+  uint8_t row[WIDTH / 8];        // bounded by the panel width, not by the window (16 bytes for this panel)
+  if (wb_win > int16_t(sizeof(row))) return; // unreachable, keeps the bound next to the declaration
   if (!_using_partial_mode) _Init_Part();
   _setPartialRamArea(x1, y1, w1, h1);
   _writeCommand(command);
   for (int16_t i = 0; i < h1; i++)
   {
-    for (int16_t j = 0; j < w1 / 8; j++)
+    for (int16_t j = 0; j < wb_win; j++)
     {
       uint8_t data;
       // use wb, h of bitmap for index!
@@ -104,8 +104,9 @@ void GxEPD2_213_B74::_writeImage(uint8_t command, const uint8_t bitmap[], int16_
         data = bitmap[idx];
       }
       if (invert) data = ~data;
-      _writeData(data);
+      row[j] = data;
     }
+    _writeData(row, wb_win); // block transfer per row
   }
   delay(1); // yield() to avoid WDT on ESP8266 and ESP32
 }
@@ -145,12 +146,15 @@ void GxEPD2_213_B74::_writeImagePart(uint8_t command, const uint8_t bitmap[], in
   w1 -= dx;
   h1 -= dy;
   if ((w1 <= 0) || (h1 <= 0)) return;
+  const int16_t wb_win = w1 / 8; // bytes per window row; w1 is a multiple of 8 and <= WIDTH, see clipping above
+  uint8_t row[WIDTH / 8];        // bounded by the panel width, not by the window (16 bytes for this panel)
+  if (wb_win > int16_t(sizeof(row))) return; // unreachable, keeps the bound next to the declaration
   if (!_using_partial_mode) _Init_Part();
   _setPartialRamArea(x1, y1, w1, h1);
   _writeCommand(command);
   for (int16_t i = 0; i < h1; i++)
   {
-    for (int16_t j = 0; j < w1 / 8; j++)
+    for (int16_t j = 0; j < wb_win; j++)
     {
       uint8_t data;
       // use wb_bitmap, h_bitmap of bitmap for index!
@@ -168,8 +172,9 @@ void GxEPD2_213_B74::_writeImagePart(uint8_t command, const uint8_t bitmap[], in
         data = bitmap[idx];
       }
       if (invert) data = ~data;
-      _writeData(data);
+      row[j] = data;
     }
+    _writeData(row, wb_win); // block transfer per row
   }
   delay(1); // yield() to avoid WDT on ESP8266 and ESP32
 }
@@ -260,7 +265,7 @@ void GxEPD2_213_B74::refresh(int16_t x, int16_t y, int16_t w, int16_t h)
   int16_t y1 = y < 0 ? 0 : y; // limit
   w1 = x1 + w1 < int16_t(WIDTH) ? w1 : int16_t(WIDTH) - x1; // limit
   h1 = y1 + h1 < int16_t(HEIGHT) ? h1 : int16_t(HEIGHT) - y1; // limit
-  if ((w1 <= 0) || (h1 <= 0)) return; 
+  if ((w1 <= 0) || (h1 <= 0)) return;
   // make x1, w1 multiple of 8
   w1 += x1 % 8;
   if (w1 % 8 > 0) w1 += 8 - w1 % 8;

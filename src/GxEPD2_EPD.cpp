@@ -16,6 +16,7 @@
 #else
 #include <avr/pgmspace.h>
 #endif
+#include <string.h> // memset
 
 GxEPD2_EPD::GxEPD2_EPD(int8_t cs, int8_t dc, int8_t rst, int8_t busy, int8_t busy_level, uint32_t busy_timeout,
                        uint16_t w, uint16_t h, GxEPD2::Panel p, bool c, bool pu, bool fpu, SPIClass &spi) :
@@ -98,9 +99,9 @@ void GxEPD2_EPD::_reset()
 
 void GxEPD2_EPD::_waitWhileBusy(const char* comment, uint16_t busy_time)
 {
-  // For full refreshes, meshtastic/firmare will poll GxEPD2_EPD::isBusy() instead of waiting here (for EInkDynamicDisplay only)
+  // For full/fast refreshes, meshtastic/firmware will poll GxEPD2_EPD::isBusy() instead of waiting here (for EInkDynamicDisplay only)
 #if defined(USE_EINK_DYNAMICDISPLAY)
-  if (_isUpdatingFull(comment))
+  if (_isAsyncRefresh(comment))
     return;
 #endif
 
@@ -159,9 +160,43 @@ void GxEPD2_EPD::_writeData(const uint8_t* data, uint16_t n)
 {
   _spi.beginTransaction(_spi_settings);
   if (_cs >= 0) digitalWrite(_cs, LOW);
+  // A TX-only block transfer, transfer(const void* tx_buf, void* rx_buf, size_t count),
+  // is only provided by the Adafruit nRF52 core. The Nordic SDK based core provides
+  // transfer(void* buf, size_t count) only, which transfers in place and would
+  // overwrite the source buffer, so it has to keep the byte-wise loop.
+#if defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_NRF52_ADAFRUIT)
+  _spi.transfer(data, NULL, n);
+#else
   for (uint16_t i = 0; i < n; i++)
   {
     _spi.transfer(*data++);
+  }
+#endif
+  if (_cs >= 0) digitalWrite(_cs, HIGH);
+  _spi.endTransaction();
+}
+
+void GxEPD2_EPD::_writeDataRepeated(uint8_t value, uint16_t n)
+{
+  _spi.beginTransaction(_spi_settings);
+  if (_cs >= 0) digitalWrite(_cs, LOW);
+  // Chunk size bounds stack usage, not the transfer: the loop below handles any length,
+  // and this is still far fewer SPI calls than one transfer per byte.
+  uint8_t chunk[32];
+  memset(chunk, value, sizeof(chunk));
+  while (n > 0)
+  {
+    uint16_t c = (n > sizeof(chunk)) ? sizeof(chunk) : n;
+    // same core check as in _writeData() above
+#if defined(ARDUINO_ARCH_NRF52) || defined(ARDUINO_NRF52_ADAFRUIT)
+    _spi.transfer(chunk, NULL, c);
+#else
+    for (uint16_t i = 0; i < c; i++)
+    {
+      _spi.transfer(chunk[i]);
+    }
+#endif
+    n -= c;
   }
   if (_cs >= 0) digitalWrite(_cs, HIGH);
   _spi.endTransaction();
@@ -256,7 +291,7 @@ bool GxEPD2_EPD::isBusy() {
 }
 
 // Used to skip _waitWhileBusy(), for meshtastic async
-bool GxEPD2_EPD::_isUpdatingFull(const char* comment) {
-  // True if comment matches
-  return ( strcmp(comment, "_Update_Full") == 0 );
+bool GxEPD2_EPD::_isAsyncRefresh(const char* comment) {
+  // True if comment matches (both full and fast refresh are awaited asynchronously by the caller)
+  return ( strcmp(comment, "_Update_Full") == 0 || strcmp(comment, "_Update_Part") == 0 );
 }

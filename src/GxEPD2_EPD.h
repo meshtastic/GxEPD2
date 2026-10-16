@@ -98,6 +98,7 @@ class GxEPD2_EPD
     void _writeCommand(uint8_t c);
     void _writeData(uint8_t d);
     void _writeData(const uint8_t* data, uint16_t n);
+    void _writeDataRepeated(uint8_t value, uint16_t n); // fill controller RAM with a single value (block SPI transfer)
     void _writeDataPGM(const uint8_t* data, uint16_t n, int16_t fill_with_zeroes = 0);
     void _writeDataPGM_sCS(const uint8_t* data, uint16_t n, int16_t fill_with_zeroes = 0);
     void _writeCommandData(const uint8_t* pCommandData, uint8_t datalen);
@@ -105,7 +106,7 @@ class GxEPD2_EPD
     void _startTransfer();
     void _transfer(uint8_t value);
     void _endTransfer();
-    bool _isUpdatingFull(const char* comment);  // Meshtastic: Determine if _waitWhileBusy() should be skipped (for async), by comparing the comment string..
+    bool _isAsyncRefresh(const char* comment);  // Meshtastic: Determine if _waitWhileBusy() should be skipped (for async), by comparing the comment string..
   protected:
     int8_t _cs, _dc, _rst, _busy, _busy_level;
     uint32_t _busy_timeout;
